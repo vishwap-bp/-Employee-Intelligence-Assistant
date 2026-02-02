@@ -1,0 +1,21 @@
+
+streamlit>=1.31.0
+pandas>=2.1.0
+numpy>=1.26.0
+python-dotenv>=1.0.0
+
+# AI & LangChain Ecosystem (Pinned Stable Versions)
+langchain==0.2.6
+langchain-community==0.2.6
+langchain-core==0.2.11
+langchain-groq==0.1.6
+langchain-huggingface==0.0.3
+sentence-transformers>=2.7.0
+chromadb>=0.5.0
+
+# UI Enhancements
+plotly>=5.18.0
+streamlit-extras>=0.4.0
+openpyxl>=3.1.2
+pysqlite3-binary
+pyarrow

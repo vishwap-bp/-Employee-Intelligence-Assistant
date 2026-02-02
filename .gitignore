@@ -1,0 +1,32 @@
+# Private environment variables
+.env
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local Database & Metadata (The Knowledge Base)
+db/
+metadata/active_data.csv
+metadata/dataset_hash.json
+
+# Data files (to prevent accidental upload of datasets)
+*.csv
+*.xlsx
+*.xls
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS and Log files
+.DS_Store
+Thumbs.db
+*.log
+
