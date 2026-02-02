@@ -18,12 +18,22 @@ def get_rag_chain(api_key):
 
     # 2. Vector DB
     from config import get_active_db_path
+    import chromadb
     active_path = get_active_db_path()
     
+    # Use the same client approach as ingest.py for consistency and stability
+    client = chromadb.PersistentClient(
+        path=active_path,
+        settings=chromadb.config.Settings(
+            anonymized_telemetry=False,
+            is_persistent=True
+        )
+    )
+    
     vectorstore = Chroma(
-        persist_directory=active_path,
+        client=client,
+        collection_name="employee_kb",
         embedding_function=embeddings,
-        collection_name="employee_kb"
     )
 
     # IMPROVED: Increase retrieval count for better coverage
