@@ -93,7 +93,16 @@ def ingest_dataset(uploaded_file, file_bytes):
             os.makedirs(path_to_use, exist_ok=True)
             
             # Step B: Initialize Chroma with a strictly fresh settings object
-            from chromadb.config import Settings
+            import chromadb
+            
+            # Use the newer client-based approach to ensure fresh settings
+            client = chromadb.PersistentClient(
+                path=path_to_use,
+                settings=chromadb.config.Settings(
+                    anonymized_telemetry=False,
+                    is_persistent=True
+                )
+            )
             
             vectorstore = Chroma.from_texts(
                 texts=sentences,
@@ -101,11 +110,7 @@ def ingest_dataset(uploaded_file, file_bytes):
                 embedding=embeddings,
                 persist_directory=path_to_use,
                 collection_name="employee_kb",
-                client_settings=Settings(
-                    is_persistent=True,
-                    persist_directory=path_to_use,
-                    anonymized_telemetry=False
-                )
+                client=client
             )
             
             save_dataset_hash(current_hash, path_to_use, uploaded_file.name, df)
