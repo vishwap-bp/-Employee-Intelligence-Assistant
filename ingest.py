@@ -98,7 +98,9 @@ def ingest_dataset(uploaded_file, file_bytes):
             if "readonly" in err_msg or "1032" in err_msg:
                 if attempt < max_attempts - 1:
                     import hashlib
-                    path_to_use = f"{PERSIST_DIRECTORY}_{int(hashlib.md5(str(e).encode()).hexdigest()[:8])}"
+                    # FIXED: Use hexadecimal string instead of trying to convert hex to int
+                    unique_suffix = hashlib.md5(str(e).encode()).hexdigest()[:8]
+                    path_to_use = f"{PERSIST_DIRECTORY}_{unique_suffix}"
                     continue # Try again with unique path
                 else:
                     raise e
