@@ -77,49 +77,48 @@ def ingest_dataset(uploaded_file, file_bytes):
 
     # 3. ABSOLUTE Resilience: Create and Persist Vector DB with Error Recovery
     max_attempts = 3
-    # Use a unique timestamped path if the default is locked/readonly
     import time
-    path_to_use = PERSIST_DIRECTORY
+    import uuid
+    import shutil
+    
+    # Start with a fresh unique path if we suspect corruption or locks
+    unique_id = str(uuid.uuid4())[:8]
+    path_to_use = f"{PERSIST_DIRECTORY}_{int(time.time())}_{unique_id}"
     
     for attempt in range(max_attempts):
         try:
-            # Ensure the directory is writable and fresh if it's a new attempt
+            # Step A: Clean slate for the specific path we are about to use
+            if os.path.exists(path_to_use):
+                shutil.rmtree(path_to_use, ignore_errors=True)
             os.makedirs(path_to_use, exist_ok=True)
             
-            # Verify write permissions by creating a dummy file
-            test_file = os.path.join(path_to_use, f".write_test_{int(time.time())}")
-            with open(test_file, "w") as f:
-                f.write("test")
-            os.remove(test_file)
+            # Step B: Initialize Chroma with a strictly fresh settings object
+            from chromadb.config import Settings
             
             vectorstore = Chroma.from_texts(
                 texts=sentences,
                 metadatas=metadatas,
                 embedding=embeddings,
                 persist_directory=path_to_use,
-                collection_name="employee_kb"
+                collection_name="employee_kb",
+                client_settings=Settings(
+                    is_persistent=True,
+                    persist_directory=path_to_use,
+                    anonymized_telemetry=False
+                )
             )
+            
             save_dataset_hash(current_hash, path_to_use, uploaded_file.name, df)
             return "NEW"
             
         except Exception as e:
             err_msg = str(e).lower()
-            # Handle SQLite ReadOnly (1032) and other access errors
-            if any(x in err_msg for x in ["readonly", "1032", "permission", "access"]):
+            # If "tenants" or "no such table" or "readonly" occurs, try a completely new path
+            if any(x in err_msg for x in ["tenants", "readonly", "1032", "permission", "code: 1"]):
                 if attempt < max_attempts - 1:
-                    # Create a completely fresh, unique directory to bypass the OS lock
-                    import uuid
+                    time.sleep(1) # Small cool-down
                     unique_id = str(uuid.uuid4())[:8]
                     path_to_use = f"{PERSIST_DIRECTORY}_{int(time.time())}_{unique_id}"
-                    continue # Try again with unique path
-                else:
-                    raise e
-            elif "tenants" in err_msg or "code: 1" in err_msg:
-                if attempt < max_attempts - 1:
-                    # Critical schema error - Wipe and retry fresh
-                    import shutil
-                    if os.path.exists(path_to_use):
-                        shutil.rmtree(path_to_use, ignore_errors=True)
                     continue 
                 else:
                     raise e
