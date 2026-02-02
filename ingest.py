@@ -76,12 +76,21 @@ def ingest_dataset(uploaded_file, file_bytes):
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
     # 3. ABSOLUTE Resilience: Create and Persist Vector DB with Error Recovery
-    max_attempts = 2
+    max_attempts = 3
+    # Use a unique timestamped path if the default is locked/readonly
+    import time
     path_to_use = PERSIST_DIRECTORY
     
     for attempt in range(max_attempts):
         try:
+            # Ensure the directory is writable and fresh if it's a new attempt
             os.makedirs(path_to_use, exist_ok=True)
+            
+            # Verify write permissions by creating a dummy file
+            test_file = os.path.join(path_to_use, f".write_test_{int(time.time())}")
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
             
             vectorstore = Chroma.from_texts(
                 texts=sentences,
@@ -95,12 +104,13 @@ def ingest_dataset(uploaded_file, file_bytes):
             
         except Exception as e:
             err_msg = str(e).lower()
-            if "readonly" in err_msg or "1032" in err_msg:
+            # Handle SQLite ReadOnly (1032) and other access errors
+            if any(x in err_msg for x in ["readonly", "1032", "permission", "access"]):
                 if attempt < max_attempts - 1:
-                    import hashlib
-                    # FIXED: Use hexadecimal string instead of trying to convert hex to int
-                    unique_suffix = hashlib.md5(str(e).encode()).hexdigest()[:8]
-                    path_to_use = f"{PERSIST_DIRECTORY}_{unique_suffix}"
+                    # Create a completely fresh, unique directory to bypass the OS lock
+                    import uuid
+                    unique_id = str(uuid.uuid4())[:8]
+                    path_to_use = f"{PERSIST_DIRECTORY}_{int(time.time())}_{unique_id}"
                     continue # Try again with unique path
                 else:
                     raise e
