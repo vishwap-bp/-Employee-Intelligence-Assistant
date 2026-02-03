@@ -10,55 +10,45 @@ from config import PERSIST_DIRECTORY, HASH_FILE, EMBEDDING_MODEL
 def get_file_hash(file_bytes):
     return hashlib.md5(file_bytes).hexdigest()
 def is_already_ingested(current_hash):
-    if not os.path.exists(HASH_FILE):
-        return False
-    try:
-        with open(HASH_FILE, "r") as f:
-            content = f.read().strip()
-            if not content: return False
-            saved = json.loads(content)
-            # Support both single 'hash' and list of 'hashes'
-            hashes = saved.get("hashes", [])
-            if not isinstance(hashes, list):
-                hashes = [saved.get("hash")] if "hash" in saved else []
-            return current_hash in hashes
-    except (json.JSONDecodeError, ValueError):
-        return False
+    from config import get_dataset_registry
+    registry = get_dataset_registry()
+    for dataset in registry["datasets"]:
+        if dataset["hash"] == current_hash:
+            return True
+    return False
 
-def save_dataset_hash(current_hash, path_used, filename, df=None):
+def save_dataset_to_registry(current_hash, db_path, filename, df):
+    from config import get_dataset_registry
     os.makedirs(os.path.dirname(HASH_FILE), exist_ok=True)
     
-    hashes = []
-    filenames = []
-    if os.path.exists(HASH_FILE):
-        try:
-            with open(HASH_FILE, "r") as f:
-                data = json.load(f)
-                hashes = data.get("hashes", [])
-                filenames = data.get("filenames", [])
-                if not isinstance(hashes, list):
-                    hashes = [data.get("hash")] if "hash" in data else []
-        except:
-            hashes = []
-            filenames = []
-
-    if current_hash not in hashes:
-        hashes.append(current_hash)
+    registry = get_dataset_registry()
     
-    if filename and filename not in filenames:
-        filenames.append(filename)
-            
-    # Save the dataframe for persistent dashboard access
-    if df is not None:
-        df_path = os.path.join(os.path.dirname(HASH_FILE), "active_data.csv")
-        df.to_csv(df_path, index=False)
-            
+    # Generate a unique path for the CSV to prevent overwrite
+    import time
+    csv_filename = f"data_{int(time.time())}_{filename.replace(' ', '_')}"
+    if not csv_filename.endswith(".csv"):
+        csv_filename += ".csv"
+    csv_path = os.path.join(os.path.dirname(HASH_FILE), csv_filename)
+    
+    # Save CSV
+    df.to_csv(csv_path, index=False)
+    
+    # Add to registry
+    new_entry = {
+        "filename": filename,
+        "db_path": db_path,
+        "csv_path": csv_path,
+        "hash": current_hash
+    }
+    
+    # Remove existing entry if it's the same hash (update scenario)
+    registry["datasets"] = [d for dataset in [registry["datasets"]] for d in dataset if d["hash"] != current_hash]
+    registry["datasets"].append(new_entry)
+    
     with open(HASH_FILE, "w") as f:
-        json.dump({
-            "hashes": hashes,
-            "filenames": filenames,
-            "active_db_path": path_used
-        }, f)
+        json.dump(registry, f)
+    
+    return new_entry
 
 def ingest_dataset(uploaded_file, file_bytes):
     current_hash = get_file_hash(file_bytes)
@@ -81,21 +71,17 @@ def ingest_dataset(uploaded_file, file_bytes):
     import uuid
     import shutil
     
-    # Start with a fresh unique path if we suspect corruption or locks
+    # Start with a fresh unique path for every ingestion to ensure isolation
     unique_id = str(uuid.uuid4())[:8]
     path_to_use = f"{PERSIST_DIRECTORY}_{int(time.time())}_{unique_id}"
     
     for attempt in range(max_attempts):
         try:
-            # Step A: Clean slate for the specific path we are about to use
             if os.path.exists(path_to_use):
                 shutil.rmtree(path_to_use, ignore_errors=True)
             os.makedirs(path_to_use, exist_ok=True)
             
-            # Step B: Initialize Chroma with a strictly fresh settings object
             import chromadb
-            
-            # Use the newer client-based approach to ensure fresh settings
             client = chromadb.PersistentClient(
                 path=path_to_use,
                 settings=chromadb.config.Settings(
@@ -113,7 +99,7 @@ def ingest_dataset(uploaded_file, file_bytes):
                 client=client
             )
             
-            save_dataset_hash(current_hash, path_to_use, uploaded_file.name, df)
+            save_dataset_to_registry(current_hash, path_to_use, uploaded_file.name, df)
             return "NEW"
             
         except Exception as e:

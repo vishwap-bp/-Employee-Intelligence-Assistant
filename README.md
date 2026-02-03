@@ -1,5 +1,5 @@
 # 💼 Employee Intelligence Assistant
-### AI-Powered Workforce Analytics with RAG
+### Enterprise-Grade Isolated Multi-Dataset RAG Architecture
 
 ## 📋 Permissions & Requirements
 *   **Python 3.10+**: Ensure Python is installed and accessible in your system path.
@@ -8,21 +8,23 @@
 *   **Network Access**: Internet connection is required for initial model downloads and API communication with Groq.
 
 ## 📖 Overview
-*   **Professional RAG Platform**: Built specifically for HR teams, Project Managers, and leadership.
-*   **Interactive Intelligence**: Transforms raw employee spreadsheets into a data-grounded knowledge base.
-*   **Advanced Models**: Leverages Llama 3.3 70B and ChromaDB for high-accuracy insights.
+*   **Isolated Intelligence Layers**: A sophisticated RAG platform that allows managing multiple datasets as distinct, isolated intelligence layers.
+*   **Dataset Registry**: Built-in library management to switch between different team reports or project spreadsheets instantly.
+*   **Advanced Models**: Leverages Llama 3.3 70B and ChromaDB Persistent Client for high-accuracy insights.
 *   **Fact-Grounded**: Responses are strictly derived from retrieved data to eliminate hallucinations.
 
 ## 🚀 Key Features
-*   **🧠 Semantic Workforce Understanding**:
-    *   Converts CSV/Excel employee data into rich natural-language context.
-    *   Optimized for structured HR and project-management datasets.
-*   **💬 AI-Driven Query Interface**:
-    *   Ask complex questions such as: "Who is overloaded this month?" or "Which roles are underutilized?"
-    *   Compare workload across departments with accurate data retrieval.
+*   **🧠 Multi-Dataset Registry**:
+    *   Manage a library of uploaded files and switch context instantly.
+    *   Per-dataset chat history ensures conversations remain isolated.
+*   **💬 AI-Driven Contextual Querying**:
+    *   Ask complex questions targeted at specific datasets.
+    *   Automatic "Pointer Reset" ensures reliable ingestion for CSV and Excel files.
 *   **📊 Executive-Ready Dashboard**:
-    *   Automated workforce metrics for quick leadership reviews.
-    *   Interactive Plotly visualizations for trends, allocation, and utilization.
+    *   Dynamic metrics and Plotly visualizations that refresh based on the active dataset.
+*   **🔐 Atomic Data Governance**:
+    *   **Individual Deletion**: Remove specific datasets with a single click (clears DB and metadata).
+    *   **Factory Reset**: Complete system purge with a safety confirmation dialog.
 *   **🔐 Privacy-First Design**:
     *   Uses local embeddings (`sentence-transformers`) so data processing stays local.
     *   Employee data never leaves your machine; only inference queries reach the Groq API.
@@ -62,14 +64,14 @@
 *   **Access Dashboard**: Open `http://localhost:8501` in your browser.
 
 ## 📂 Project Structure
-*   **`app.py`**: Streamlit UI, chat interface, and executive dashboards.
-*   **`ingest.py`**: Dataset hashing, embedding generation, and vector DB persistence.
-*   **`processor.py`**: Semantic cleaning and information-dense row chunking.
-*   **`rag_engine.py`**: LangChain LCEL-based RAG pipeline construction.
+*   **`app.py`**: Multi-dataset UI, context-aware chat, and dynamic dashboard.
+*   **`ingest.py`**: Registry management, isolated embedding generation, and UUID-based persistence.
+*   **`config.py`**: Dataset Registry logic and centralized model configurations.
+*   **`rag_engine.py`**: Context-aware RAG pipeline supporting dynamic DB connections.
+*   **`processor.py`**: Semantic cleaning and robust pointer-reset ingestion.
 *   **`fix_sqlite.py`**: Critical compatibility layer for Linux SQLite versions.
-*   **`config.py`**: Centralized configuration for models, paths, and parameters.
-*   **`db/`**: Persistent vector database (Excluded from Git).
-*   **`metadata/`**: Dataset fingerprints and cached visuals (Excluded from Git).
+*   **`db/`**: Persistent vector databases (Excluded from Git).
+*   **`metadata/`**: Dataset Registry file and isolated CSV copies (Excluded from Git).
 *   **`.env`**: Private environment variables (Excluded from Git).
 
 ## 🧠 How the RAG Pipeline Works
@@ -82,10 +84,9 @@
 7.  **Generate**: LLM provides a factual answer grounded strictly in the retrieved data.
 
 ## 🛡️ Privacy & Security
-*   **🔒 Local Isolation**: No employee data is sent to third-party training services.
-*   **🧾 Git Protection**: `.gitignore` prevents committing sensitive `db/`, `metadata/`, and `.env` files.
-*   **🧬 Data Integrity**: Each dataset creates a fresh, isolated intelligence layer.
-*   **🧠 Collision Prevention**: Deterministic hashing ensures datasets don't overlap or conflict.
+*   **🔒 Isolated Contexts**: Data from "Dataset A" never bleeds into "Dataset B."
+*   **🧾 Zero-Trace Deletion**: Deleting a dataset performs an atomic purge of all related disk artifacts.
+*   **🧠 Privacy-First**: Local embeddings ensure employee data stays within your controlled environment.
 
 ## 🎯 Ideal Use Cases
 *   **HR Workload Analysis**: Identifying burnout risks or resource imbalances.

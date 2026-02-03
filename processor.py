@@ -7,11 +7,13 @@ def clean_and_serialize(uploaded_file) -> Tuple[List[str], List[dict], pd.DataFr
     """
     # 1. Load with robust encoding fallbacks
     try:
+        uploaded_file.seek(0) # Ensure we start from the beginning
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
     except UnicodeDecodeError:
+        uploaded_file.seek(0) # Reset for the fallback attempt
         df = pd.read_csv(uploaded_file, encoding='latin1')
 
     # 2. Advanced Cleaning

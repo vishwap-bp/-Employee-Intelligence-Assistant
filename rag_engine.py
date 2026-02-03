@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnablePassthrough
 
 from config import LLM_MODEL, EMBEDDING_MODEL, PERSIST_DIRECTORY
 
-def get_rag_chain(api_key):
+def get_rag_chain(api_key, db_path=None):
     """
     OPTIMIZED RAG Engine with improved prompt and retrieval settings.
     """
@@ -19,8 +19,15 @@ def get_rag_chain(api_key):
     # 2. Vector DB
     from config import get_active_db_path
     import chromadb
-    active_path = get_active_db_path()
+    active_path = db_path if db_path else get_active_db_path()
     
+    # If no path available yet, return a dummy or wait
+    if not active_path or not os.path.exists(active_path):
+        class DummyChain:
+            def invoke(self, input_dict):
+                return {"answer": "The Knowledge Base is not yet initialized. Please upload a file."}
+        return DummyChain()
+
     # Use the same client approach as ingest.py for consistency and stability
     client = chromadb.PersistentClient(
         path=active_path,

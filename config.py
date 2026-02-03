@@ -35,16 +35,34 @@ PERSIST_DIRECTORY = os.path.join(VECTOR_DB_DIR, "chroma")
 METADATA_DIR = os.path.abspath("./metadata")
 HASH_FILE = os.path.join(METADATA_DIR, "dataset_hash.json")
 
-def get_active_db_path():
+def get_dataset_registry():
     """
-    Dynamically determines which DB path to use based on the saved hash metadata.
-    This ensures ingestion and RAG stay in sync if a fallback path was used.
+    Retrieves the full registry of uploaded datasets.
+    Structure: {"datasets": [{"filename": str, "db_path": str, "csv_path": str, "hash": str}]}
     """
     if os.path.exists(HASH_FILE):
         try:
             with open(HASH_FILE, "r") as f:
                 data = json.load(f)
-                return data.get("active_db_path", PERSIST_DIRECTORY)
+                if "datasets" in data:
+                    return data
+                # Backward compatibility for old single-file format
+                if "active_db_path" in data:
+                    return {"datasets": [{
+                        "filename": data.get("filenames", ["Legacy Dataset"])[0],
+                        "db_path": data.get("active_db_path"),
+                        "csv_path": os.path.join(METADATA_DIR, "active_data.csv"),
+                        "hash": data.get("hashes", ["unknown"])[0]
+                    }]}
         except:
             pass
+    return {"datasets": []}
+
+def get_active_db_path():
+    """
+    Backward compatibility helper.
+    """
+    registry = get_dataset_registry()
+    if registry["datasets"]:
+        return registry["datasets"][-1]["db_path"]
     return PERSIST_DIRECTORY
