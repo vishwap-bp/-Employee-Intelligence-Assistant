@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 
-from config import LLM_MODEL, EMBEDDING_MODEL, PERSIST_DIRECTORY
+from app_config import LLM_MODEL, EMBEDDING_MODEL, PERSIST_DIRECTORY
 
 def get_rag_chain(api_key, db_path=None):
     """
@@ -17,7 +17,7 @@ def get_rag_chain(api_key, db_path=None):
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
     # 2. Vector DB
-    from config import get_active_db_path
+    from app_config import get_active_db_path
     import chromadb
     active_path = db_path if db_path else get_active_db_path()
     

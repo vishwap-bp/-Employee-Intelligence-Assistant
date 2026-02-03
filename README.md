@@ -66,7 +66,7 @@
 ## 📂 Project Structure
 *   **`app.py`**: Multi-dataset UI, context-aware chat, and dynamic dashboard.
 *   **`ingest.py`**: Registry management, isolated embedding generation, and UUID-based persistence.
-*   **`config.py`**: Dataset Registry logic and centralized model configurations.
+*   **`app_config.py`**: Dataset Registry logic and centralized model configurations.
 *   **`rag_engine.py`**: Context-aware RAG pipeline supporting dynamic DB connections.
 *   **`processor.py`**: Semantic cleaning and robust pointer-reset ingestion.
 *   **`fix_sqlite.py`**: Critical compatibility layer for Linux SQLite versions.

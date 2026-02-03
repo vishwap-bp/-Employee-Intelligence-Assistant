@@ -5,12 +5,12 @@ import json
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from processor import clean_and_serialize
-from config import PERSIST_DIRECTORY, HASH_FILE, EMBEDDING_MODEL
+from app_config import PERSIST_DIRECTORY, HASH_FILE, EMBEDDING_MODEL
 
 def get_file_hash(file_bytes):
     return hashlib.md5(file_bytes).hexdigest()
 def is_already_ingested(current_hash):
-    from config import get_dataset_registry
+    from app_config import get_dataset_registry
     registry = get_dataset_registry()
     for dataset in registry["datasets"]:
         if dataset["hash"] == current_hash:
@@ -18,7 +18,7 @@ def is_already_ingested(current_hash):
     return False
 
 def save_dataset_to_registry(current_hash, db_path, filename, df):
-    from config import get_dataset_registry
+    from app_config import get_dataset_registry
     os.makedirs(os.path.dirname(HASH_FILE), exist_ok=True)
     
     registry = get_dataset_registry()

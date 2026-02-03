@@ -14,7 +14,7 @@ from streamlit_extras.metric_cards import style_metric_cards
 # Importing your logic modules
 from processor import clean_and_serialize
 from rag_engine import get_rag_chain
-from config import PERSIST_DIRECTORY, HASH_FILE, get_dataset_registry
+from app_config import PERSIST_DIRECTORY, HASH_FILE, get_dataset_registry
 
 # 1. Environment & Security
 load_dotenv()
