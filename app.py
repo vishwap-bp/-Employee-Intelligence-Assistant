@@ -171,18 +171,82 @@ with st.sidebar:
             st.warning("Permanently delete ALL data?")
             c1, c2 = st.columns(2)
             if c1.button("✅ Yes", type="primary"):
-                # Nuke everything
-                if os.path.exists(os.path.dirname(PERSIST_DIRECTORY)):
-                    shutil.rmtree(os.path.dirname(PERSIST_DIRECTORY), ignore_errors=True)
-                if os.path.exists(os.path.dirname(HASH_FILE)):
-                    # Keep the directory but delete contents
-                    for f in os.listdir(os.path.dirname(HASH_FILE)):
-                        os.remove(os.path.join(os.path.dirname(HASH_FILE), f))
-                
-                st.session_state.clear()
-                st.success("System Reset!")
-                time.sleep(1)
-                st.rerun()
+                try:
+                    import gc
+                    
+                    # Step 1: Clear Streamlit Resource Cache (Critical for releasing handles)
+                    st.cache_resource.clear()
+                    
+                    # Reset status
+                    st.session_state.kb_status = "INACTIVE"
+                    if "kb_files" in st.session_state: 
+                        del st.session_state.kb_files
+                    
+                    # Step 2: Force reset of RAG objects
+                    if 'rag_chain' in st.session_state:
+                        st.session_state.rag_chain = None
+                        del st.session_state.rag_chain
+                    
+                    # Step 3: Clear data references
+                    if 'df' in st.session_state:
+                        st.session_state.df = None
+                        del st.session_state.df
+                    
+                    if 'active_dataset' in st.session_state:
+                        del st.session_state.active_dataset
+                    
+                    if 'registry' in st.session_state:
+                        del st.session_state.registry
+                        
+                    if 'chat_histories' in st.session_state:
+                        del st.session_state.chat_histories
+                    
+                    # Step 4: Ultra-aggressive garbage collection
+                    for _ in range(5):
+                        gc.collect()
+                    time.sleep(2.0)  # Wait for OS to catch up
+                    
+                    # Step 5: Try to delete with retry logic
+                    max_retries = 3
+                    db_parent = os.path.dirname(PERSIST_DIRECTORY)
+                    
+                    for attempt in range(max_retries):
+                        try:
+                            # Delete all vector database folders
+                            if os.path.exists(db_parent):
+                                for item in os.listdir(db_parent):
+                                    item_path = os.path.join(db_parent, item)
+                                    if os.path.isdir(item_path):
+                                        shutil.rmtree(item_path)
+                            break  # Success!
+                        except (PermissionError, OSError) as e:
+                            if attempt < max_retries - 1:
+                                time.sleep(2.0) 
+                                gc.collect()
+                            else:
+                                # Fallback: rename directory if it can't be deleted
+                                if os.path.exists(db_parent):
+                                    try:
+                                        shutil.move(db_parent, f"{db_parent}_old_{int(time.time())}")
+                                    except:
+                                        raise e
+                    
+                    # Step 6: Delete all metadata files
+                    metadata_parent = os.path.dirname(HASH_FILE)
+                    if os.path.exists(metadata_parent):
+                        for f in os.listdir(metadata_parent):
+                            f_path = os.path.join(metadata_parent, f)
+                            if os.path.isfile(f_path):
+                                os.remove(f_path)
+                    
+                    st.session_state.show_factory_confirm = False
+                    st.success("✅ Knowledge base cleared!")
+                    st.info("💡 **Ready for new data.** You can now upload a fresh file.")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"⚠️ Could not fully clear KB: {e}")
+                    st.warning("**Workaround**: Restart the application or refresh the browser.")
             if c2.button("❌ No"):
                 st.session_state.show_factory_confirm = False
                 st.rerun()
