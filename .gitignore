@@ -15,7 +15,8 @@ __pycache__/
 db/
 metadata/active_data.csv
 metadata/dataset_hash.json
-
+Project_Employee_AI_Assistent/metadata
+metadata/
 # Data files (to prevent accidental upload of datasets)
 *.csv
 *.xlsx
