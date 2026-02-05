@@ -14,7 +14,7 @@ from streamlit_extras.metric_cards import style_metric_cards
 # Importing your logic modules
 from processor import clean_and_serialize
 from rag_engine import get_rag_chain
-from app_config import PERSIST_DIRECTORY, HASH_FILE, get_dataset_registry
+from app_config import PERSIST_DIRECTORY, get_dataset_registry
 
 # 1. Environment & Security
 load_dotenv()
@@ -45,8 +45,19 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 2.5 Session State Initialization
+# Initialize user identification
+if "username" not in st.session_state:
+    import random
+    import string
+    # Generate a random username for anonymous users
+    # Create a session-unique identifier using timestamp and randomness
+    import time
+    timestamp_part = str(int(time.time()))[-6:]  # Last 6 digits of timestamp
+    random_part = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    st.session_state.username = f"user_{timestamp_part}{random_part}"
+
 if "registry" not in st.session_state:
-    st.session_state.registry = get_dataset_registry()
+    st.session_state.registry = get_dataset_registry(st.session_state.username)
 
 if "active_dataset" not in st.session_state:
     # Default to the most recent dataset if available
@@ -60,7 +71,7 @@ if "chat_histories" not in st.session_state:
 
 # Helper to refresh registry
 def refresh_registry():
-    st.session_state.registry = get_dataset_registry()
+    st.session_state.registry = get_dataset_registry(st.session_state.username)
 
 # 3. Sidebar Controls
 with st.sidebar:
@@ -73,17 +84,27 @@ with st.sidebar:
         help="Upload a new employee spreadsheet to build a dedicated intelligence layer."
     )
     
+    # File size validation
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+    if uploaded_file and uploaded_file.size > MAX_FILE_SIZE:
+        st.error(f"❌ File too large ({uploaded_file.size / (1024*1024):.1f}MB). Please upload files under 50MB.")
+        uploaded_file = None
+    
     if uploaded_file:
         # Check if already processed in this session to avoid loop
         if "last_uploaded" not in st.session_state or st.session_state.last_uploaded != uploaded_file.name:
             try:
                 with st.status("🛠️ Building Intelligence Layer...", expanded=True) as status:
+                    # Add detailed progress information
+                    status.update(label="📥 Loading file...", state="running")
                     bytes_data = uploaded_file.read()
                     uploaded_file.seek(0) # Reset pointer for Pandas
+                    status.update(label="🔄 Processing data...", state="running")
                     from ingest import ingest_dataset
-                    status_code = ingest_dataset(uploaded_file, bytes_data)
+                    status_code = ingest_dataset(uploaded_file, bytes_data, st.session_state.username)
                     
                     if status_code in ["NEW", "EXISTING"]:
+                        status.update(label="📊 Updating registry...", state="running")
                         refresh_registry()
                         # Auto-select the newly uploaded file
                         current_hash = hashlib.md5(bytes_data).hexdigest()
@@ -94,8 +115,12 @@ with st.sidebar:
                                 break
                         
                         st.session_state.last_uploaded = uploaded_file.name
-                        status.update(label="✅ Ready!", state="complete")
+                        status.update(label="✅ Intelligence Layer Ready!", state="complete", expanded=False)
+                        st.success("✅ Dataset processed successfully!")
                         st.rerun()
+                    else:
+                        status.update(label="❌ Processing failed", state="error")
+                        st.error(f"Dataset processing failed: {status_code}")
             except Exception as e:
                 st.error(f"Upload failed: {e}")
 
@@ -145,8 +170,10 @@ with st.sidebar:
                         os.remove(d["csv_path"])
                     
                     # 2. Registry Delete
+                    from app_config import get_dataset_registry, get_user_storage_paths
+                    user_paths = get_user_storage_paths(st.session_state.username)
                     new_datasets = [dataset for dataset in datasets if dataset["hash"] != d["hash"]]
-                    with open(HASH_FILE, "w") as f:
+                    with open(user_paths["hash_file"], "w") as f:
                         json.dump({"datasets": new_datasets}, f)
                     
                     # 3. State cleanup
@@ -201,6 +228,10 @@ with st.sidebar:
                     if 'chat_histories' in st.session_state:
                         del st.session_state.chat_histories
                     
+                    # Clear upload session state
+                    if 'last_uploaded' in st.session_state:
+                        del st.session_state.last_uploaded
+                    
                     # Step 4: Ultra-aggressive garbage collection
                     for _ in range(5):
                         gc.collect()
@@ -208,11 +239,14 @@ with st.sidebar:
                     
                     # Step 5: Try to delete with retry logic
                     max_retries = 3
-                    db_parent = os.path.dirname(PERSIST_DIRECTORY)
+                    from app_config import get_user_storage_paths
+                    user_paths = get_user_storage_paths(st.session_state.username)
+                    
+                    db_parent = user_paths["vector_db"]
                     
                     for attempt in range(max_retries):
                         try:
-                            # Delete all vector database folders
+                            # Delete all vector database folders for this user
                             if os.path.exists(db_parent):
                                 for item in os.listdir(db_parent):
                                     item_path = os.path.join(db_parent, item)
@@ -231,8 +265,8 @@ with st.sidebar:
                                     except:
                                         raise e
                     
-                    # Step 6: Delete all metadata files
-                    metadata_parent = os.path.dirname(HASH_FILE)
+                    # Step 6: Delete all metadata files for this user
+                    metadata_parent = user_paths["metadata"]
                     if os.path.exists(metadata_parent):
                         for f in os.listdir(metadata_parent):
                             f_path = os.path.join(metadata_parent, f)
@@ -281,7 +315,16 @@ if st.session_state.active_dataset:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 
-        if prompt := st.chat_input(f"Ask about {d['filename']}..."):
+        # Create a row with the clear button beside the chat input
+        col1, col2 = st.columns([4, 1])
+        
+        if st.session_state.chat_histories[history_key]:
+            with col2:
+                if st.button("🗑️", key=f"clear_chat_{history_key}", help="Clear chat history"):
+                    st.session_state.chat_histories[history_key] = []
+                    st.rerun()
+        
+        if prompt := st.chat_input(f"Ask about {d['filename']}...", key="chat_input"):
             st.session_state.chat_histories[history_key].append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -289,16 +332,11 @@ if st.session_state.active_dataset:
             with st.chat_message("assistant"):
                 with st.spinner("Analyzing..."):
                     # Dynamic RAG connection
-                    chain = get_rag_chain(api_key, db_path=d["db_path"])
+                    chain = get_rag_chain(api_key, db_path=d["db_path"], username=st.session_state.username)
                     result = chain.invoke({"input": prompt})
                     answer = result["answer"]
                     st.markdown(answer)
                     st.session_state.chat_histories[history_key].append({"role": "assistant", "content": answer})
-
-        if st.session_state.chat_histories[history_key]:
-            if st.button("🗑️ Clear Chat History", key=f"clear_chat_{history_key}", use_container_width=True):
-                st.session_state.chat_histories[history_key] = []
-                st.rerun()
 
     with tab2:
         st.subheader("Workforce Metrics")

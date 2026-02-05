@@ -30,19 +30,48 @@ TOP_K = 10
 
 # STORAGE PATHS
 # =========================
-VECTOR_DB_DIR = os.path.abspath("./db")
-PERSIST_DIRECTORY = os.path.join(VECTOR_DB_DIR, "chroma")
-METADATA_DIR = os.path.abspath("./metadata")
-HASH_FILE = os.path.join(METADATA_DIR, "dataset_hash.json")
+# Base directories
+BASE_VECTOR_DB_DIR = os.path.abspath("./db")
+BASE_METADATA_DIR = os.path.abspath("./metadata")
 
-def get_dataset_registry():
+# User-specific paths will be determined dynamically
+PERSIST_DIRECTORY = None  # Will be set per user
+METADATA_DIR = None       # Will be set per user
+HASH_FILE = None          # Will be set per user
+
+
+def get_user_storage_paths(username):
+    """Generate user-specific storage paths"""
+    user_safe = username.replace(" ", "_").replace("@", "_").replace(".", "_")
+    user_db_dir = os.path.join(BASE_VECTOR_DB_DIR, user_safe)
+    user_metadata_dir = os.path.join(BASE_METADATA_DIR, user_safe)
+    user_hash_file = os.path.join(user_metadata_dir, "dataset_hash.json")
+    
+    # Create directories if they don't exist
+    os.makedirs(user_db_dir, exist_ok=True)
+    os.makedirs(user_metadata_dir, exist_ok=True)
+    
+    return {
+        "vector_db": user_db_dir,
+        "metadata": user_metadata_dir,
+        "hash_file": user_hash_file
+    }
+
+def get_dataset_registry(username=None):
     """
-    Retrieves the full registry of uploaded datasets.
+    Retrieves the full registry of uploaded datasets for a specific user.
     Structure: {"datasets": [{"filename": str, "db_path": str, "csv_path": str, "hash": str}]}
     """
-    if os.path.exists(HASH_FILE):
+    # Use default user if none specified (for backward compatibility)
+    if username is None:
+        username = "default_user"
+    
+    user_paths = get_user_storage_paths(username)
+    hash_file = user_paths["hash_file"]
+    
+    if os.path.exists(hash_file):
         try:
-            with open(HASH_FILE, "r") as f:
+            with open(hash_file, "r") as f:
                 data = json.load(f)
                 if "datasets" in data:
                     return data
@@ -51,18 +80,18 @@ def get_dataset_registry():
                     return {"datasets": [{
                         "filename": data.get("filenames", ["Legacy Dataset"])[0],
                         "db_path": data.get("active_db_path"),
-                        "csv_path": os.path.join(METADATA_DIR, "active_data.csv"),
+                        "csv_path": os.path.join(user_paths["metadata"], "active_data.csv"),
                         "hash": data.get("hashes", ["unknown"])[0]
                     }]}
         except:
             pass
     return {"datasets": []}
 
-def get_active_db_path():
+def get_active_db_path(username=None):
     """
-    Backward compatibility helper.
+    Backward compatibility helper that works with user-specific data.
     """
-    registry = get_dataset_registry()
+    registry = get_dataset_registry(username)
     if registry["datasets"]:
         return registry["datasets"][-1]["db_path"]
     return PERSIST_DIRECTORY

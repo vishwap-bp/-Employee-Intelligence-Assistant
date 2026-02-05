@@ -5,30 +5,32 @@ import json
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from processor import clean_and_serialize
-from app_config import PERSIST_DIRECTORY, HASH_FILE, EMBEDDING_MODEL
+from app_config import PERSIST_DIRECTORY, EMBEDDING_MODEL, get_user_storage_paths
 
 def get_file_hash(file_bytes):
     return hashlib.md5(file_bytes).hexdigest()
-def is_already_ingested(current_hash):
+def is_already_ingested(current_hash, username):
     from app_config import get_dataset_registry
-    registry = get_dataset_registry()
+    registry = get_dataset_registry(username)
     for dataset in registry["datasets"]:
         if dataset["hash"] == current_hash:
             return True
     return False
 
-def save_dataset_to_registry(current_hash, db_path, filename, df):
-    from app_config import get_dataset_registry
-    os.makedirs(os.path.dirname(HASH_FILE), exist_ok=True)
+def save_dataset_to_registry(current_hash, db_path, filename, df, username):
+    from app_config import get_dataset_registry, get_user_storage_paths
     
-    registry = get_dataset_registry()
+    user_paths = get_user_storage_paths(username)
+    os.makedirs(user_paths["metadata"], exist_ok=True)
+    
+    registry = get_dataset_registry(username)
     
     # Generate a unique path for the CSV to prevent overwrite
     import time
     csv_filename = f"data_{int(time.time())}_{filename.replace(' ', '_')}"
     if not csv_filename.endswith(".csv"):
         csv_filename += ".csv"
-    csv_path = os.path.join(os.path.dirname(HASH_FILE), csv_filename)
+    csv_path = os.path.join(user_paths["metadata"], csv_filename)
     
     # Save CSV
     df.to_csv(csv_path, index=False)
@@ -45,27 +47,36 @@ def save_dataset_to_registry(current_hash, db_path, filename, df):
     registry["datasets"] = [d for dataset in [registry["datasets"]] for d in dataset if d["hash"] != current_hash]
     registry["datasets"].append(new_entry)
     
-    with open(HASH_FILE, "w") as f:
+    with open(user_paths["hash_file"], "w") as f:
         json.dump(registry, f)
     
     return new_entry
 
-def ingest_dataset(uploaded_file, file_bytes):
+def ingest_dataset(uploaded_file, file_bytes, username):
     current_hash = get_file_hash(file_bytes)
 
-    if is_already_ingested(current_hash):
+    if is_already_ingested(current_hash, username):
         return "EXISTING"
 
-    # 1. Clean and Serialize
-    sentences, metadatas, df = clean_and_serialize(uploaded_file)
+    # 1. Clean and Serialize with error handling
+    try:
+        sentences, metadatas, df = clean_and_serialize(uploaded_file)
+    except Exception as e:
+        return f"ERROR: Data processing failed - {str(e)}"
 
     if not sentences:
         return "ERROR: No readable data found."
 
-    # 2. HuggingFace Embeddings (Local & Free)
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    # 2. HuggingFace Embeddings (Local & Free) with error handling
+    try:
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    except Exception as e:
+        return f"ERROR: Embedding model failed to load - {str(e)}"
 
-    # 3. ABSOLUTE Resilience: Create and Persist Vector DB with Error Recovery
+    # 3. GET USER-SPECIFIC STORAGE PATHS
+    user_paths = get_user_storage_paths(username)
+    
+    # 4. ABSOLUTE RESILIENCE: Create and Persist Vector DB with Error Recovery
     max_attempts = 3
     import time
     import uuid
@@ -73,7 +84,7 @@ def ingest_dataset(uploaded_file, file_bytes):
     
     # Start with a fresh unique path for every ingestion to ensure isolation
     unique_id = str(uuid.uuid4())[:8]
-    path_to_use = f"{PERSIST_DIRECTORY}_{int(time.time())}_{unique_id}"
+    path_to_use = f"{user_paths['vector_db']}/{int(time.time())}_{unique_id}"
     
     for attempt in range(max_attempts):
         try:
@@ -99,7 +110,7 @@ def ingest_dataset(uploaded_file, file_bytes):
                 client=client
             )
             
-            save_dataset_to_registry(current_hash, path_to_use, uploaded_file.name, df)
+            save_dataset_to_registry(current_hash, path_to_use, uploaded_file.name, df, username)
             return "NEW"
             
         except Exception as e:
@@ -109,7 +120,7 @@ def ingest_dataset(uploaded_file, file_bytes):
                 if attempt < max_attempts - 1:
                     time.sleep(1) # Small cool-down
                     unique_id = str(uuid.uuid4())[:8]
-                    path_to_use = f"{PERSIST_DIRECTORY}_{int(time.time())}_{unique_id}"
+                    path_to_use = f"{user_paths['vector_db']}/{int(time.time())}_{unique_id}"
                     continue 
                 else:
                     raise e
