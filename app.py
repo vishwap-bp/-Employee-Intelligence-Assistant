@@ -580,17 +580,12 @@ with st.sidebar:
                     # Step 1: Clear Streamlit Resource Cache (Critical for releasing handles)
                     st.cache_resource.clear()
                     
-                    # Reset status
-                    st.session_state.kb_status = "INACTIVE"
-                    if "kb_files" in st.session_state: 
-                        del st.session_state.kb_files
-                    
                     # Step 2: Force reset of RAG objects
                     if 'rag_chain' in st.session_state:
                         st.session_state.rag_chain = None
                         del st.session_state.rag_chain
                     
-                    # Step 3: Clear data references
+                    # Step 3: Clear ALL dataset-related session state
                     if 'df' in st.session_state:
                         st.session_state.df = None
                         del st.session_state.df
@@ -607,6 +602,11 @@ with st.sidebar:
                     # Clear upload session state
                     if 'last_uploaded' in st.session_state:
                         del st.session_state.last_uploaded
+                    
+                    # CRITICAL: Reset KB status
+                    st.session_state.kb_status = "INACTIVE"
+                    if "kb_files" in st.session_state: 
+                        del st.session_state.kb_files
                     
                     # Step 4: Ultra-aggressive garbage collection
                     for _ in range(5):
@@ -641,17 +641,29 @@ with st.sidebar:
                                     except:
                                         raise e
                     
-                    # Step 6: Delete all metadata files for this user
+                    # Step 6: Delete all metadata files for this user (including registry)
                     metadata_parent = user_paths["metadata"]
                     if os.path.exists(metadata_parent):
+                        # Delete all files including dataset_hash.json
                         for f in os.listdir(metadata_parent):
                             f_path = os.path.join(metadata_parent, f)
                             if os.path.isfile(f_path):
                                 os.remove(f_path)
+                        
+                        # Delete the metadata directory itself to ensure clean slate
+                        try:
+                            shutil.rmtree(metadata_parent)
+                        except:
+                            pass  # If can't delete directory, at least files are gone
                     
+                    # Step 7: Force complete refresh by clearing confirmation flag BEFORE rerun
                     st.session_state.show_factory_confirm = False
+                    
+                    # Show success message
                     st.success("✅ Knowledge base cleared!")
                     st.info("💡 **Ready for new data.** You can now upload a fresh file.")
+                    
+                    # CRITICAL: Rerun to refresh UI
                     st.rerun()
                     
                 except Exception as e:
